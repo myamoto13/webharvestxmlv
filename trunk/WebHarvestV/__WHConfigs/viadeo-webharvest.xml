@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<config charset="ISO-8859-1" scriptlang="groovy">
+	<!-- Customisable settings -->
+	<var-def name="workingDir">C:/Users/Michael Cortes/Desktop/webharvest/viadeo</var-def> <!-- chemin du répertoire de travail -->
+	
+	<var-def name="keywordFilePath"><template>${workingDir}/keywords.txt</template></var-def>
+   
+    <var-def name="countryForm">fr</var-def>	<!-- possibilités : fr, dk, gb, se ...-->
+    <var-def name="county">121</var-def>  <!-- possibilités explorées {121} correspond à {PACA}-->
+    
+  	<var-def name="completeDatas">false</var-def> <!-- false : chargement des données standards ; true : chargement des données du profil (expériences, description)-->
+  	<var-def name="resultsPath"><template>${workingDir}/Results</template></var-def>
+  	
+	<!-- End of Customisable settings -->
+	
+	<var-def name="pageSearchPath"><template>${resultsPath}/pageSearch</template></var-def> 
+  	<var-def name="pageProfileResults"><template>${resultsPath}/pageProfile</template></var-def> 
+	<var-def name="resultFilePath"><template>${resultsPath}/result.csv</template></var-def>
+	<var-def name="urlViadeo">http://viadeo.com</var-def>
+	
+	 <!-- Create file -->
+	<try>
+        <body>
+            <file path="${resultFilePath}"/>
+        </body>
+        <catch>
+           <file path="${resultFilePath}" action="write">
+				Country;City;Name;Job;Company;Previous job;Previous company;Profile URL;Keywords;Decription;Experiences...
+			</file>
+        </catch>
+    </try>
+    
+    
+    <!-- log in -->
+    <http method="get" url="${urlViadeo}" cookie-policy="browser"/>
+			
+    <http method="post" url="https://secure.viadeo.com/r/account/authentication/signin" cookie-policy="browser">
+        <http-param name="email">cynthia.hermana@laposte.net</http-param>
+        <http-param name="password">extiapaca</http-param>
+    </http>
+    
+    <http url="http://www.viadeo.com/recherche/membres" method="get" cookie-policy="browser">
+     	<http-param name="ga_from">Fu:/search;Fb:N-header;Fe:search-avanced-link;</http-param>
+    </http>
+    
+    <!-- Download search result pages -->
+	<loop item="keywords" index="indexKeyWord" empty="true">
+	    <list>
+			<tokenize trimtokens="trimtokens" allowemptytokens="allowemptytokens">
+			    <file action="read" type="binary" path="${keywordFilePath}"/>
+			</tokenize>
+		</list>
+		<body>
+			<var-def name="keywordsFile" overwrite="true">
+				<regexp replace="true">
+					<regexp-pattern>[\s\"]</regexp-pattern>
+				    <regexp-source>
+				        <var name="keywords"/>
+				    </regexp-source>
+				    <regexp-result>
+				        <template>_</template>
+				    </regexp-result>
+				</regexp>
+			</var-def>
+		    
+		  	<var-def name="urlPageResult" overwrite="true"><template>
+				http://www.viadeo.com/v/search/members/?ga_from=Tfrom%3Asearch-members%3BBfrom%3Adefault-form%3BEfrom%3A%3B&amp;fullName=&amp;keywords=${sys.quot}${keywords}${sys.quot}&amp;search=Chercher&amp;company=&amp;companyExactSearch=on&amp;position=&amp;positionExactSearch=off&amp;allPosition=on&amp;schoolName=&amp;sector=0&amp;town=&amp;countryForm=${countryForm}&amp;county=${county.toString()}&amp;joinDateId=0020&amp;language=&amp;btnRadio=0020
+		  	</template></var-def>
+		  	
+		  	<var-def name="urlNxtPage" overwrite="true"><var name="urlPageResult"/></var-def>
+		  	<while condition='${!urlNxtPage.toString().equals("")}' index="indexPage">
+		  		
+		  		<var-def name="urlPageResult" overwrite="true"><template>
+					http://www.viadeo.com/v/search/members/?ga_from=Tfrom%3Asearch-members%3BBfrom%3Adefault-form%3BEfrom%3A%3B&amp;fullName=&amp;keywords=${sys.quot}${keywords}${sys.quot}&amp;search=Chercher&amp;company=&amp;companyExactSearch=on&amp;position=&amp;positionExactSearch=off&amp;allPosition=on&amp;schoolName=&amp;sector=0&amp;town=&amp;countryForm=${countryForm}&amp;county=${county.toString()}&amp;joinDateId=0020&amp;language=&amp;btnRadio=0020&amp;pageNumber=${indexPage}
+			  	</template></var-def>
+		  	
+		    	<file action="write" path="${pageSearchPath}/${keywordsFile}_${indexPage}.html" charset="UTF-8">
+			    	<http url="${urlPageResult}" method="get" cookie-policy="browser"/>
+			    </file>
+			    
+			    <!-- start of : writing results -->
+			    <loop item="searchDivCandidat" index="indexProfileLink" empty="true">
+			        <list>
+			          	<xpath expression="(//div[@class='no-prevent hcard bram partial ']  | //div[@class='no-prevent hcard bram partial'])">
+					    	<html-to-xml>
+								<file action="read" path="${pageSearchPath}/${keywordsFile}_${indexPage}.html" charset="UTF-8"/>
+							</html-to-xml>
+					    </xpath>
+			        </list>
+			     	<body>
+			     		<var-def name="urlProfile" overwrite="true">
+				     		<text><xquery>
+							    <xq-param name="doc"><xpath expression="//a[@class='profile-link']"><var name="searchDivCandidat"/></xpath></xq-param>
+							    <xq-expression><![CDATA[
+							        declare variable $doc as node() external;
+							        
+							        let $urlProfile := concat("http://viadeo.com", replace(string(data($doc/a/@href)), '(;|\s+|(\r?\n|\r))', ' '))
+							        return 
+						        		$urlProfile
+							    ]]></xq-expression>
+							</xquery></text>
+			     		</var-def>
+			     		
+			     		<var-def name="nomProfile" overwrite="true">
+				     		<text><xquery>
+							    <xq-param name="doc"><xpath expression="//a[@class='profile-link']"><var name="searchDivCandidat"/></xpath></xq-param>
+							    <xq-expression><![CDATA[
+							        declare variable $doc as node() external;
+							        
+							        let $nomProfile := replace(string(data($doc/a/text())), '(\.|;|\s+|(\r?\n|\r))', '_')
+							        return 
+						        		$nomProfile
+							    ]]></xq-expression>
+							</xquery></text>
+			     		</var-def>
+			     		<file type="binary" path="${resultFilePath}" action="append">
+			     			<text><xquery>
+							    <xq-param name="doc">
+							        <var name="searchDivCandidat"/>
+							    </xq-param>
+							    <xq-expression><![CDATA[
+							        declare variable $doc as node() external;
+							        
+							        let $urlProfile := replace(string(data($doc//h1[@class='name mbn']/a[@class='profile-link']/@href)), '(;|\s+|(\r?\n|\r))', ' ')
+							        return 
+						        	concat("
+          								   ", replace(string(data($doc//p[@class='address ptxs pbs mbn']/a[@class='country']/text())), '(;|\s+|(\r?\n|\r))', ' '), ';', 
+          								   replace(string(data($doc//p[@class='address ptxs pbs mbn']/a[@class='city']/text())), '(;|\s+|(\r?\n|\r))', ' '), ';',
+          								   replace(string(data($doc//h1[@class='name mbn']/a[@class='profile-link']/text())), '(;|\s+|(\r?\n|\r))', ' '), ';',
+          								   replace(string(data($doc//ul[@class='experiences mbxs']/li[1]/a[1]/text())), '(;|\s+|(\r?\n|\r))', ' '), ';', 
+          								   replace(string(data($doc//ul[@class='experiences mbxs']/li[1]/a[2]/text())), '(;|\s+|(\r?\n|\r))', ' '), ';',
+          								   replace(string(data($doc//ul[@class='experiences mbxs']/li[2]/a[1]/text())), '(;|\s+|(\r?\n|\r))', ' '), ';',
+          								   replace(string(data($doc//ul[@class='experiences mbxs']/li[2]/a[2]/text())), '(;|\s+|(\r?\n|\r))', ' '), ';', 
+          								   concat("http://viadeo.com", replace(string(data($doc//h1[@class='name mbn']/a[@class='profile-link']/@href)), '(;|\s+|(\r?\n|\r))', ' '))
+          									)
+							    ]]></xq-expression>
+							</xquery></text>
+						</file>
+						
+						<file type="binary" path="${resultFilePath}" action="append"><template>;${keywordsFile}</template></file>
+			     		
+			     		<!-- start of : writing advanced results -->
+			     		<case><if condition="${completeDatas.toString() == 'true'}">
+				     		<file action="write" path="${pageProfileResults}/${keywordsFile}_${nomProfile}_${indexProfileLink}.html" charset="UTF-8">
+						    	<http url="${urlProfile}" method="get" cookie-policy="browser"/>
+							</file>
+							
+							<file type="binary" path="${resultFilePath}" action="append">
+				     			<text><xquery>
+								    <xq-param name="doc">
+								        <html-to-xml>
+							    			<file action="read" path="${pageProfileResults}/${keywordsFile}_${nomProfile}_${indexProfileLink}.html" charset="UTF-8"/>
+							    		</html-to-xml>
+								    </xq-param>
+								    <xq-expression><![CDATA[
+								        declare variable $doc as node() external;
+								        
+								        let $description := replace(string-join($doc//div[@class='mainContainerProfil']//p[@class='seeFull target_text_fr']/text(), ' '), '(;|\s+|(\r?\n|\r))', ' ')
+								        return 
+							        		concat(';', $description)
+								    ]]></xq-expression>
+								</xquery></text>
+							</file>
+							
+							<var-def name="urlResume" overwrite="true">
+					     		<text><xquery>
+								    <xq-param name="doc">
+							    		<html-to-xml>
+							    			<file action="read" path="${pageProfileResults}/${keywordsFile}_${nomProfile}_${indexProfileLink}.html" charset="UTF-8"/>
+							    		</html-to-xml>
+								    </xq-param>
+								    <xq-expression><![CDATA[
+								        declare variable $doc as node() external;
+								        
+								        let $urlProfile := concat("http://viadeo.com", replace(string(data($doc//a[@id='pTabTimeline']/@href)), '(;|\s+|(\r?\n|\r))', ' '))
+								        return 
+							        		$urlProfile
+								    ]]></xq-expression>
+								</xquery></text>
+				     		</var-def>
+				     	
+							<file action="write" path="${pageProfileResults}/${keywordsFile}_${nomProfile}_${indexProfileLink}_r.html" charset="UTF-8">
+							   	<http url="${urlResume}" method="get" cookie-policy="browser"/>
+							</file>
+							
+							 <loop item="liExperience" index="indexProfileLink" empty="true">
+						        <list>
+						          	<xpath expression="//ul[@id='memberContent']/li">
+								    	<html-to-xml>
+											<file action="read" path="${pageProfileResults}/${keywordsFile}_${nomProfile}_${indexProfileLink}_r.html" charset="UTF-8"/>
+										</html-to-xml>
+								    </xpath>
+						        </list>
+						     	<body>
+									<file type="binary" path="${resultFilePath}" action="append">
+						     			<text><xquery>
+										    <xq-param name="doc"><var name="liExperience"/></xq-param>
+										    <xq-expression><![CDATA[
+												declare variable $doc as node() external;
+										        let $description := replace(string-join($doc//div[@class='gu gu-desc ']//div[@class='content']/div[@class='description']/text(), ' '), '(;|\s+|(\r?\n|\r))', ' ')
+								        		return 
+									        	concat(';',
+									        		   replace(string-join($doc//div[@class='gu gu-desc ']//div[@class='title']/p[@class='titre']/text(), ' '), '(;|\s+|(\r?\n|\r))', ' '), ';',
+		              								   replace(string-join($doc//div[@class='gu gu-desc ']//div[@class='title']//span[@class='itemName']/a/text(), ' '), '(;|\s+|(\r?\n|\r))', ' '), ';', 
+		              								   replace(string-join($doc//div[@class='gu gu-date']//div[@class='dtend ']/span[@class='month' or @class='year']/text(), ' '), '(;|\s+|(\r?\n|\r))', ' '), ';',
+		              								   replace(string-join($doc//div[@class='gu gu-date']//div[@class='dtstart']/span[@class='month' or @class='year']/text(), ' '), '(;|\s+|(\r?\n|\r))', ' '), ';', 
+		              								   $description
+		              									)
+										    ]]></xq-expression>
+										</xquery></text>
+									</file>
+						     	</body>
+						     </loop>
+					     </if></case>
+					     <!-- end of : writing advanced results -->
+					     
+			     	</body>
+			     </loop>
+			     <!-- end of : writing results -->
+			    
+			    
+			    <var-def name="urlNxtPage" overwrite="true">
+				    <xquery>
+					    <xq-param name="doc">
+					        <html-to-xml>
+					    		<file action="read" path="${pageSearchPath}/${keywordsFile}_${indexPage}.html" charset="UTF-8"/>
+					    	</html-to-xml>
+					    </xq-param>
+					    <xq-expression><![CDATA[
+					        declare variable $doc as node() external;
+					        
+					        let $nextPage := string(data($doc//p[@class='numerotation']/a[@class='nextPage']/@href))
+						        
+					        return $nextPage
+					    ]]></xq-expression>
+					</xquery>
+			    </var-def>
+		    </while>
+			    
+		</body>
+	</loop>
+	
+	<!--
+	<case>
+    	<if condition="${createCSV.toString() == 'true'}">
+    		<try>
+		        <body>
+		            <file path="${resultFilePath}"/>
+		        </body>
+		        <catch>
+		           <file path="${resultFilePath}" action="write">
+						pays;ville;name;posteActuel;entrepriseActuelle;postePrecedent;entreprisePrecedente;urlProfile
+					</file>
+		        </catch>
+		    </try>
+		    
+		    <loop item="filePath" index="i" empty="true">
+			    <list>
+			    	<file type="binary" path="${workingDir}/${pageSearchPath}/" action="list"/>
+				</list>
+				<body>
+					<loop item="divPersonne" index="indexDivPersonne" empty="true">
+				        <list>
+				          	<xpath expression="//div[@class='no-prevent hcard bram partial ']  | //div[@class='no-prevent hcard bram partial']">
+						    	<html-to-xml>
+									<file type="binary" path="${filePath}"/>
+								</html-to-xml>
+						    </xpath>
+				        </list>
+				     	<body>
+				     		<file type="binary" path="${resultFilePath}" action="append">
+				     			<text><xquery>
+								    <xq-param name="doc">
+								        <var name="divPersonne"/>
+								    </xq-param>
+								    <xq-expression><![CDATA[
+								        declare variable $doc as node() external;
+								        
+								        let $urlProfile := replace(string(data($doc//h1[@class='name mbn']/a[@class='profile-link']/@href)), '(;|\s+|(\r?\n|\r))', ' ')
+								        return 
+							        	concat("
+              								   ", replace(string(data($doc//p[@class='address ptxs pbs mbn']/a[@class='country']/text())), '(;|\s+|(\r?\n|\r))', ' '), ";", 
+              								   replace(string(data($doc//p[@class='address ptxs pbs mbn']/a[@class='city']/text())), '(;|\s+|(\r?\n|\r))', ' '), ";",
+              								   replace(string(data($doc//h1[@class='name mbn']/a[@class='profile-link']/text())), '(;|\s+|(\r?\n|\r))', ' '), ";",
+              								   replace(string(data($doc//ul[@class='experiences mbxs']/li[1]/a[1]/text())), '(;|\s+|(\r?\n|\r))', ' '), ";", 
+              								   replace(string(data($doc//ul[@class='experiences mbxs']/li[1]/a[2]/text())), '(;|\s+|(\r?\n|\r))', ' '), ";",
+              								   replace(string(data($doc//ul[@class='experiences mbxs']/li[2]/a[1]/text())), '(;|\s+|(\r?\n|\r))', ' '), ";",
+              								   replace(string(data($doc//ul[@class='experiences mbxs']/li[2]/a[2]/text())), '(;|\s+|(\r?\n|\r))', ' '), ";", 
+              								   concat("http://viadeo.com", replace(string(data($doc//h1[@class='name mbn']/a[@class='profile-link']/@href)), '(;|\s+|(\r?\n|\r))', ' '))
+              									)
+								    ]]></xq-expression>
+								</xquery></text>
+							</file>
+					   	</body>
+					</loop>
+				</body>
+			</loop>
+    	</if>
+	</case>-->
+</config>

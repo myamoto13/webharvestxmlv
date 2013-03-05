@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config charset="UTF-8" scriptlang="groovy">
+	
+	<var-def name="debugMode">false</var-def>
+	
+	<var-def name="searchWordList" overwrite="true">
+		<tokenize trimtokens="trimtokens" allowemptytokens="allowemptytokens">
+		    <file action="read" type="binary" path="martindale/entreprisesofinterest.txt"/>
+		</tokenize>
+	</var-def>
+	
+	<file type="binary" path="martindale/${sys.date()}/results.csv" action="write">
+		Name;Organisation;responsabilities;search;search page;Full URL
+	</file>
+	
+	<loop item="search" index="i">
+        <list>
+          	<var name="searchWordList"/>
+        </list>
+        <body>
+    		<var-def name="indexPersonnes" overwrite="true">0</var-def>
+			
+			<while condition='${!indexPersonnes.toString().equals("stop")}' index="i">
+	        	<var-def name="url">
+	        		<template>http://www.martindale.com/Results.aspx?ft=1&amp;frm=freesearch&amp;afs=${search}&amp;p=${indexPersonnes}</template>
+	        	</var-def>
+				<var-def name="httpPage">
+	        		<http url="${url}" method="get">
+						<http-header name="User-Agent">
+					        Mozilla/5.0 (Windows NT 6.1; WOW64; rv:18.0) Gecko/20100101 Firefox/18.0
+					    </http-header>
+					</http>
+	        	</var-def>
+	        	
+	        	<var-def name="fileName" overwrite="true">
+					<regexp replace="true">
+						<regexp-pattern>\s</regexp-pattern>
+					    <regexp-source>
+					        <var name="search"/>
+					    </regexp-source>
+					    <regexp-result>
+					        <template>_</template>
+					    </regexp-result>
+					</regexp>
+				</var-def>
+	        	
+	        	<var-def name="nextButton" overwrite="true">
+	            	<text>
+		                <xpath expression="//div[@id='divPagination']//a[@class='page' and text()='Next']/text()">
+					        <html-to-xml>
+					           <var name="httpPage"/>
+					        </html-to-xml>
+					    </xpath>
+				    </text>
+	            </var-def>
+	            
+	           <var-def name="indexPersonnes" overwrite="true">
+			 	    <case>
+				        <if condition='${nextButton.toString() != "Next"}'>stop</if>
+				        <else>
+				        	<template>${new Integer(indexPersonnes.toString()) + 10}</template>
+				        </else>
+				    </case>
+			   </var-def>
+			   
+			   <!-- write HTML only if debug -->
+			   <case>
+			   		<if condition='${debugMode.toString() == "true"}'>
+					   	<file type="binary" path="martindale/${sys.date()}/${fileName}_${indexPersonnes}.html" action="write">
+			        		<var name="httpPage"/>
+			    		</file>
+			    		<file type="binary" path="martindale/${sys.date()}/${fileName}_${indexPersonnes}.xml" action="write">
+			        		<html-to-xml><var name="httpPage"/></html-to-xml>
+			    		</file>
+	    			</if>
+			   </case>
+			   
+				
+				<var-def name="csvLineList">
+					<loop item="urlPersonne" index="i">
+				        <list>
+				          	<xpath expression='//a[@class="b"]/@href'>
+				            	<html-to-xml><var name="httpPage"/></html-to-xml>
+						    </xpath>
+				        </list>
+				     	<body>
+				     		<empty>
+					     		 <var-def name="xmlPagePersonne">
+					     		 	 <html-to-xml><http url="${sys.fullUrl('http://www.martindale.com', urlPersonne)}"/></html-to-xml>
+					     		 </var-def>
+					     		 
+					     		 <var-def name="idEnhancedProfile">
+						     		 <xpath expression="//div[@id='divEnhancedProfile']/@id">
+								        <var name="xmlPagePersonne"/>
+								    </xpath>
+					     		 </var-def>
+					     		 <case>
+					     		 	<if condition='${idEnhancedProfile.toString() == "divEnhancedProfile"}'>
+						        		<var-def name="nomPersonne" overwrite="true">
+								        	<regexp replace="true">
+												<regexp-pattern>[\n]</regexp-pattern>
+												<regexp-source>
+													<xpath expression="/html/body/form/div[3]/div/div/div[3]/table/tbody/tr[2]/td/div/div/div/div/div/div[2]/h1/text()">
+												    	<var name="xmlPagePersonne"/>
+												    </xpath>
+										   		</regexp-source>
+												<regexp-result>
+												    <template></template>
+												</regexp-result>
+											</regexp>
+										</var-def>
+							        
+										<!--<var-def name="organisationPersonne" overwrite="true">
+						        	    	<xpath expression="/html/body/form/div[3]/div/div/div[3]/table/tbody/tr/td[2]/div/div[4]/table/tbody/tr/td[2]/a/text()">
+											    <var name="xmlPagePersonne"/>
+											</xpath>
+								        </var-def>					
+										
+										<var-def name="responsabilitesPersonne" overwrite="true">
+							        	    <regexp replace="true">
+												<regexp-pattern>[\;\n]</regexp-pattern>
+												<regexp-source>
+													<xpath expression="//tr/td[text()='Responsibilities']/../td[2]/text()">
+													    <var name="xmlPagePersonne"/>
+													</xpath>
+										   		</regexp-source>
+												<regexp-result>
+												    <template>,</template>
+												</regexp-result>
+											</regexp>
+										</var-def>-->
+						        	</if>
+						        	<else>
+						        		<var-def name="nomPersonne" overwrite="true">
+								        	<regexp replace="true">
+												<regexp-pattern>[\n]</regexp-pattern>
+												<regexp-source>
+													<xpath expression="/html/body/form/div[3]/div/div/div[3]/table/tbody/tr/td[2]/div/div[4]/table/tbody/tr/td[2]/text()">
+												        <var name="xmlPagePersonne"/>
+												    </xpath>
+										   		</regexp-source>
+												<regexp-result></regexp-result>
+											</regexp>
+										</var-def>
+							        
+										<var-def name="organisationPersonne" overwrite="true">
+						        	    	<regexp replace="true">
+												<regexp-pattern>[\n\r]</regexp-pattern>
+												<regexp-source>
+													<text>
+														<xpath expression="/html/body/form/div[3]/div/div/div[3]/table/tbody/tr/td[2]/div/div[4]/table/tbody/tr/td[2]/a/text()">
+											    			<var name="xmlPagePersonne"/>
+												       	</xpath>
+													</text>
+												</regexp-source>
+												<regexp-result></regexp-result>
+											</regexp>
+								        </var-def>					
+										
+										<var-def name="responsabilitesPersonne" overwrite="true">
+											<regexp replace="true">
+												<regexp-pattern>[\r\n]+</regexp-pattern>
+												<regexp-source>
+									        	    <regexp replace="true">
+														<regexp-pattern>[\;]</regexp-pattern>
+														<regexp-source>
+															<xpath expression="//tr/td[text()='Responsibilities']/../td[2]/text()">
+															    <var name="xmlPagePersonne"/>
+															</xpath>
+												   		</regexp-source>
+														<regexp-result>
+														    <template> </template>
+														</regexp-result>
+													</regexp>
+												</regexp-source>
+													<regexp-result>
+													    <template>,</template>
+													</regexp-result>
+											</regexp>
+										</var-def>
+						        	</else>
+					     		 </case>
+					        </empty>
+					        <template>${nomPersonne};${organisationPersonne};${responsabilitesPersonne};${search};${indexPersonnes};${sys.fullUrl('http://www.martindale.com', urlPersonne)}</template>
+					        <!--
+					        <case>
+					        	<if condition='${nomPersonne.toString() != ""}'>
+					        		<template>${nomPersonne};${organisationPersonne};${responsabilitesPersonne};${search};${indexPersonnes}</template>
+					        	</if>
+					        </case>
+					        -->
+					   	</body>
+				    </loop>
+				</var-def>
+				<case>
+				 	<if condition='${csvLineList.toString() != ""}'>
+		        		<file type="binary" path="martindale/${sys.date()}/results.csv" action="append">
+				        	<text><template>${System.getProperty("line.separator")}${csvLineList}</template></text>
+			       		</file>
+		        	</if>
+				</case>
+			</while>
+        </body>
+    </loop>
+</config>

@@ -1,0 +1,9 @@
+"Ela Medical S A FR" returns 42828 results
+"Ela Medical S A" returns 1 result (name : william M. Ela, weird thing : I dont see the word "Medical" in his profile)
+"ELA Medical" returns 1 result (name : william M. Ela, weird thing : I dont see the word "Medical" in his profile)
+
+"S A" returns 1251812 results
+"Medical" returns 44321 results
+"ELA" returns 7 results (all have "Ela" in their name)
+"FR" returns 1 result (	Felipe Frías)
+
