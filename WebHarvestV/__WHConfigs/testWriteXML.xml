@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<config>
+	<file path="test.xml" action="write">
+	<html-to-xml>
+	<file path="testinput.html"/>
+	</html-to-xml>
+	</file>
+	
+	
+	<xpath expression="//ul[@id='memberContent']/li">
+			<file action="read" path="test.xml" charset="UTF-8"/>
+    </xpath>
+</config>
